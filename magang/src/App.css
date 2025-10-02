@@ -1,0 +1,11 @@
+/* Reset conflicting Vite demo styles to avoid layout overflow */
+#root {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.logo, .read-the-docs, .card { /* not used in the app */
+  all: unset;
+}

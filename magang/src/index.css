@@ -1,0 +1,46 @@
+@import "tailwindcss";
+@tailwindcss base;
+@tailwindcss components;
+@tailwindcss utilities;
+
+:root {
+  --color-navbar: #FFAD84;
+  --color-sidebar: #FFE382;
+  --color-accent: #FFC47E;
+  --color-warning: #FFF78A;
+}
+
+body {
+  @apply bg-[#fef9f5] text-gray-800;
+  font-family: 'Inter', sans-serif;
+}
+
+.navbar {
+  @apply bg-[var(--color-navbar)] text-white shadow-md;
+}
+
+.sidebar {
+  @apply bg-[var(--color-sidebar)] text-gray-900 shadow-md;
+}
+
+.button-primary {
+  @apply bg-[var(--color-navbar)] hover:bg-orange-500 text-white font-medium py-2 px-4 rounded transition;
+}
+
+.button-secondary {
+  @apply bg-[var(--color-accent)] hover:bg-orange-400 text-white font-medium py-2 px-4 rounded transition;
+}
+
+.card {
+  @apply bg-white rounded-lg shadow p-4 border border-gray-200;
+}
+
+.table-header {
+  @apply bg-gray-100 text-gray-700;
+}
+
+.input {
+  @apply border border-gray-300 px-3 py-2 rounded-md w-full focus:outline-none focus:ring-2 focus:ring-orange-300;
+}
+
+
