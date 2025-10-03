@@ -1,5 +1,7 @@
-// SNMP Service - Browser Compatible Version
+// SNMP Service - Browser Compatible Version with Supabase Integration
 // This version uses WebSocket or API calls instead of direct SNMP library
+
+import { dbService } from '../config/supabase.js'
 
 class SNMPService {
   constructor() {
@@ -52,6 +54,8 @@ class SNMPService {
   // Make API call to backend SNMP service
   async makeAPICall(endpoint, data = {}) {
     try {
+      console.log(`📡 Making API call to ${endpoint}`, data);
+      
       const response = await fetch(`${this.apiBaseUrl}${endpoint}`, {
         method: 'POST',
         headers: {
@@ -64,9 +68,11 @@ class SNMPService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      console.log(`✅ API call successful to ${endpoint}`, result);
+      return result;
     } catch (error) {
-      console.error('API call failed:', error);
+      console.error(`❌ API call failed to ${endpoint}:`, error);
       throw error;
     }
   }
@@ -95,12 +101,15 @@ class SNMPService {
   // Get system information from device
   async getSystemInfo(host, community = 'public') {
     try {
+      console.log(`🔍 Getting system info from ${host}...`);
+      
       const result = await this.makeAPICall('/snmp/system-info', {
         host,
-        community
+        community,
+        version: 2
       });
 
-      return {
+      const systemInfo = {
         host,
         description: result.sysDescr || 'Unknown Device',
         objectId: result.sysObjectID || '',
@@ -108,11 +117,14 @@ class SNMPService {
         contact: result.sysContact || '',
         name: result.sysName || host,
         location: result.sysLocation || '',
-        timestamp: new Date().toISOString()
+        timestamp: result.timestamp || new Date().toISOString()
       };
+      
+      console.log(`✅ System info retrieved from ${host}:`, systemInfo);
+      return systemInfo;
     } catch (error) {
       // Fallback to mock data for demo purposes
-      console.warn('SNMP API not available, using mock data:', error.message);
+      console.warn(`⚠️ SNMP API not available for ${host}, using mock data:`, error.message);
       return this.getMockSystemInfo(host);
     }
   }
@@ -120,15 +132,20 @@ class SNMPService {
   // Get interface information from device
   async getInterfaceInfo(host, community = 'public') {
     try {
+      console.log(`🔍 Getting interface info from ${host}...`);
+      
       const result = await this.makeAPICall('/snmp/interfaces', {
         host,
-        community
+        community,
+        version: 2
       });
 
-      return result.interfaces || [];
+      const interfaces = result.interfaces || [];
+      console.log(`✅ Retrieved ${interfaces.length} interfaces from ${host}`);
+      return interfaces;
     } catch (error) {
       // Fallback to mock data for demo purposes
-      console.warn('SNMP API not available, using mock data:', error.message);
+      console.warn(`⚠️ SNMP API not available for ${host}, using mock data:`, error.message);
       return this.getMockInterfaceInfo(host);
     }
   }
@@ -165,24 +182,139 @@ class SNMPService {
     }
   }
 
-  // Auto-discovery network topology
+  // Auto-discovery network topology with database integration
   async discoverTopology(startHosts, community = 'public') {
     try {
+      // Create discovery session in database
+      const sessionData = {
+        session_name: `Discovery ${new Date().toLocaleString()}`,
+        start_hosts: startHosts,
+        community_string: community,
+        status: 'running',
+        started_at: new Date().toISOString()
+      };
+      
+      const session = await dbService.createDiscoverySession(sessionData);
+      console.log('Created discovery session:', session.id);
+
       const result = await this.makeAPICall('/snmp/discover-topology', {
         startHosts,
         community
       });
 
-      return {
+      const discoveryResult = {
         devices: result.devices || [],
         connections: result.connections || [],
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        sessionId: session.id
       };
+
+      // Save discovery results to database
+      await this.saveDiscoveryResultsToDatabase(discoveryResult);
+
+      return discoveryResult;
     } catch (error) {
       // Fallback to mock discovery for demo purposes
       console.warn('SNMP API not available, using mock discovery:', error.message);
-      return this.getMockTopologyDiscovery(startHosts);
+      const mockResult = this.getMockTopologyDiscovery(startHosts);
+      
+      // Still save mock results to database
+      try {
+        const sessionData = {
+          session_name: `Mock Discovery ${new Date().toLocaleString()}`,
+          start_hosts: startHosts,
+          community_string: community,
+          status: 'running',
+          started_at: new Date().toISOString()
+        };
+        
+        const session = await dbService.createDiscoverySession(sessionData);
+        mockResult.sessionId = session.id;
+        
+        await this.saveDiscoveryResultsToDatabase(mockResult);
+      } catch (dbError) {
+        console.warn('Failed to save mock results to database:', dbError.message);
+      }
+      
+      return mockResult;
     }
+  }
+
+  // Save discovery results to database
+  async saveDiscoveryResultsToDatabase(discoveryResult) {
+    try {
+      const { devices, connections, sessionId } = discoveryResult;
+      
+      // Prepare devices for database
+      const deviceData = devices.map(device => ({
+        host: device.host,
+        name: device.name || device.host,
+        description: device.description || 'Discovered Device',
+        object_id: device.objectId || '',
+        up_time: device.upTime || 0,
+        contact: device.contact || '',
+        location: device.location || '',
+        device_type: this.detectDeviceType(device.description),
+        vendor: this.detectVendor(device.description),
+        model: this.detectModel(device.description),
+        status: 'active',
+        last_seen: new Date().toISOString()
+      }));
+
+      // Prepare connections for database
+      const connectionData = connections.map(conn => ({
+        from_host: conn.from,
+        to_host: conn.to,
+        from_port: conn.fromPort || '',
+        to_port: conn.toPort || '',
+        connection_type: conn.type || 'discovered',
+        protocol: conn.protocol || 'LLDP',
+        bandwidth: conn.bandwidth || '1G',
+        status: 'active'
+      }));
+
+      // Save to database
+      const results = await dbService.saveDiscoveryResults(deviceData, connectionData, sessionId);
+      
+      console.log('Discovery results saved to database:', {
+        devices: results.devices?.length || 0,
+        connections: results.connections?.length || 0
+      });
+
+      return results;
+    } catch (error) {
+      console.error('Failed to save discovery results to database:', error);
+      throw error;
+    }
+  }
+
+  // Helper methods for device detection
+  detectDeviceType(description) {
+    if (!description) return 'unknown';
+    const desc = description.toLowerCase();
+    if (desc.includes('switch')) return 'switch';
+    if (desc.includes('router')) return 'router';
+    if (desc.includes('firewall')) return 'firewall';
+    if (desc.includes('access point') || desc.includes('ap')) return 'access_point';
+    return 'unknown';
+  }
+
+  detectVendor(description) {
+    if (!description) return 'unknown';
+    const desc = description.toLowerCase();
+    if (desc.includes('cisco')) return 'Cisco';
+    if (desc.includes('hp') || desc.includes('hewlett')) return 'HP';
+    if (desc.includes('juniper')) return 'Juniper';
+    if (desc.includes('dell')) return 'Dell';
+    if (desc.includes('aruba')) return 'Aruba';
+    return 'unknown';
+  }
+
+  detectModel(description) {
+    if (!description) return 'unknown';
+    // Extract model from description (basic pattern matching)
+    const match = description.match(/([A-Z0-9-]+)/);
+    return match ? match[1] : 'unknown';
   }
 
   // Mock data methods for demo purposes
@@ -369,6 +501,83 @@ class SNMPService {
     if (desc.includes('10m')) return '10M';
     
     return '1G';
+  }
+
+  // Database integration methods
+  async loadDevicesFromDatabase() {
+    try {
+      const devices = await dbService.getDevices();
+      console.log(`Loaded ${devices.length} devices from database`);
+      return devices;
+    } catch (error) {
+      console.error('Failed to load devices from database:', error);
+      return [];
+    }
+  }
+
+  async loadConnectionsFromDatabase() {
+    try {
+      const connections = await dbService.getConnections();
+      console.log(`Loaded ${connections.length} connections from database`);
+      return connections;
+    } catch (error) {
+      console.error('Failed to load connections from database:', error);
+      return [];
+    }
+  }
+
+  async loadDiscoverySessionsFromDatabase() {
+    try {
+      const sessions = await dbService.getDiscoverySessions();
+      console.log(`Loaded ${sessions.length} discovery sessions from database`);
+      return sessions;
+    } catch (error) {
+      console.error('Failed to load discovery sessions from database:', error);
+      return [];
+    }
+  }
+
+  async loadNetworkTopologyFromDatabase() {
+    try {
+      const topology = await dbService.getNetworkTopology();
+      console.log('Loaded network topology from database');
+      return topology;
+    } catch (error) {
+      console.error('Failed to load network topology from database:', error);
+      return null;
+    }
+  }
+
+  async saveDeviceToDatabase(deviceData) {
+    try {
+      const device = await dbService.createDevice(deviceData);
+      console.log('Device saved to database:', device.id);
+      return device;
+    } catch (error) {
+      console.error('Failed to save device to database:', error);
+      throw error;
+    }
+  }
+
+  async updateDeviceInDatabase(deviceId, updates) {
+    try {
+      const device = await dbService.updateDevice(deviceId, updates);
+      console.log('Device updated in database:', device.id);
+      return device;
+    } catch (error) {
+      console.error('Failed to update device in database:', error);
+      throw error;
+    }
+  }
+
+  async deleteDeviceFromDatabase(deviceId) {
+    try {
+      await dbService.deleteDevice(deviceId);
+      console.log('Device deleted from database:', deviceId);
+    } catch (error) {
+      console.error('Failed to delete device from database:', error);
+      throw error;
+    }
   }
 
   // Close all sessions

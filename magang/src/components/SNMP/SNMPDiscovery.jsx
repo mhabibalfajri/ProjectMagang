@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useSNMP } from '../../hooks/useSNMP';
+import SNMPRealTimeTest from './SNMPRealTimeTest';
 
 const SNMPDiscovery = ({ onDiscoveryComplete }) => {
   const [startHosts, setStartHosts] = useState('');
   const [community, setCommunity] = useState('public');
   const [discoveryProgress, setDiscoveryProgress] = useState(0);
+  const [showRealTimeTest, setShowRealTimeTest] = useState(false);
   
   const {
     isLoading,
@@ -89,6 +91,25 @@ const SNMPDiscovery = ({ onDiscoveryComplete }) => {
 
   return (
     <div className="space-y-6">
+      {/* Real-time Test Toggle */}
+      <div className="card">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-medium text-gray-900">SNMP Real-time Testing</h3>
+            <p className="text-sm text-gray-500">Test koneksi SNMP langsung ke switch</p>
+          </div>
+          <button
+            onClick={() => setShowRealTimeTest(!showRealTimeTest)}
+            className="btn-secondary"
+          >
+            {showRealTimeTest ? 'Hide' : 'Show'} Real-time Test
+          </button>
+        </div>
+      </div>
+
+      {/* Real-time Test Component */}
+      {showRealTimeTest && <SNMPRealTimeTest />}
+
       {/* Discovery Configuration */}
       <div className="card">
         <h3 className="text-lg font-medium text-gray-900 mb-4">SNMP Network Discovery</h3>

@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "start": "node start-dev.js",
     "backend": "cd backend && npm start",
-    "backend:dev": "cd backend && npm run dev"
+    "backend:dev": "cd backend && npm run dev",
+    "setup-db": "node scripts/create-tables.js",
+    "db:setup": "node scripts/create-tables.js"
   },
   "dependencies": {
     "react": "^19.1.1",

@@ -7,6 +7,8 @@ export const useSNMP = () => {
   const [devices, setDevices] = useState([]);
   const [connections, setConnections] = useState([]);
   const [discoveryStatus, setDiscoveryStatus] = useState('idle'); // idle, discovering, completed, error
+  const [discoverySessions, setDiscoverySessions] = useState([]);
+  const [networkTopology, setNetworkTopology] = useState(null);
 
   // Test koneksi ke device
   const testConnection = useCallback(async (host, community = 'public') => {
@@ -65,7 +67,7 @@ export const useSNMP = () => {
     }
   }, []);
 
-  // Auto-discovery network topology
+  // Auto-discovery network topology with database integration
   const discoverTopology = useCallback(async (startHosts, community = 'public') => {
     setIsLoading(true);
     setError(null);
@@ -77,6 +79,9 @@ export const useSNMP = () => {
       setDevices(result.devices);
       setConnections(result.connections);
       setDiscoveryStatus('completed');
+      
+      // Refresh discovery sessions from database
+      await loadDiscoverySessions();
       
       return { success: true, data: result };
     } catch (err) {
@@ -171,10 +176,137 @@ export const useSNMP = () => {
     setConnections(prev => prev.filter(conn => conn.id !== connectionId));
   }, []);
 
+  // Load data from database
+  const loadDevicesFromDatabase = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const dbDevices = await snmpService.loadDevicesFromDatabase();
+      setDevices(dbDevices);
+      return { success: true, data: dbDevices };
+    } catch (err) {
+      setError(err.message);
+      return { success: false, error: err.message };
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const loadConnectionsFromDatabase = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const dbConnections = await snmpService.loadConnectionsFromDatabase();
+      setConnections(dbConnections);
+      return { success: true, data: dbConnections };
+    } catch (err) {
+      setError(err.message);
+      return { success: false, error: err.message };
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const loadDiscoverySessions = useCallback(async () => {
+    try {
+      const sessions = await snmpService.loadDiscoverySessionsFromDatabase();
+      setDiscoverySessions(sessions);
+      return { success: true, data: sessions };
+    } catch (err) {
+      console.error('Failed to load discovery sessions:', err);
+      return { success: false, error: err.message };
+    }
+  }, []);
+
+  const loadNetworkTopology = useCallback(async () => {
+    try {
+      const topology = await snmpService.loadNetworkTopologyFromDatabase();
+      setNetworkTopology(topology);
+      return { success: true, data: topology };
+    } catch (err) {
+      console.error('Failed to load network topology:', err);
+      return { success: false, error: err.message };
+    }
+  }, []);
+
+  // Save device to database
+  const saveDeviceToDatabase = useCallback(async (deviceData) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const device = await snmpService.saveDeviceToDatabase(deviceData);
+      setDevices(prev => [...prev, device]);
+      return { success: true, data: device };
+    } catch (err) {
+      setError(err.message);
+      return { success: false, error: err.message };
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Update device in database
+  const updateDeviceInDatabase = useCallback(async (deviceId, updates) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const device = await snmpService.updateDeviceInDatabase(deviceId, updates);
+      setDevices(prev => prev.map(d => d.id === deviceId ? device : d));
+      return { success: true, data: device };
+    } catch (err) {
+      setError(err.message);
+      return { success: false, error: err.message };
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Delete device from database
+  const deleteDeviceFromDatabase = useCallback(async (deviceId) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      await snmpService.deleteDeviceFromDatabase(deviceId);
+      setDevices(prev => prev.filter(d => d.id !== deviceId));
+      setConnections(prev => prev.filter(c => c.from_host !== deviceId && c.to_host !== deviceId));
+      return { success: true };
+    } catch (err) {
+      setError(err.message);
+      return { success: false, error: err.message };
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Load all data from database on component mount
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        await Promise.all([
+          loadDevicesFromDatabase(),
+          loadConnectionsFromDatabase(),
+          loadDiscoverySessions(),
+          loadNetworkTopology()
+        ]);
+      } catch (err) {
+        console.error('Failed to load initial data:', err);
+      }
+    };
+
+    loadInitialData();
+  }, [loadDevicesFromDatabase, loadConnectionsFromDatabase, loadDiscoverySessions, loadNetworkTopology]);
+
   // Clear semua data
   const clearData = useCallback(() => {
     setDevices([]);
     setConnections([]);
+    setDiscoverySessions([]);
+    setNetworkTopology(null);
     setError(null);
     setDiscoveryStatus('idle');
   }, []);
@@ -193,6 +325,8 @@ export const useSNMP = () => {
     devices,
     connections,
     discoveryStatus,
+    discoverySessions,
+    networkTopology,
     
     // Actions
     testConnection,
@@ -204,6 +338,15 @@ export const useSNMP = () => {
     removeDevice,
     addConnection,
     removeConnection,
-    clearData
+    clearData,
+    
+    // Database operations
+    loadDevicesFromDatabase,
+    loadConnectionsFromDatabase,
+    loadDiscoverySessions,
+    loadNetworkTopology,
+    saveDeviceToDatabase,
+    updateDeviceInDatabase,
+    deleteDeviceFromDatabase
   };
 };

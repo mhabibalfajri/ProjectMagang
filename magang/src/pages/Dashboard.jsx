@@ -1,5 +1,6 @@
 import React from 'react';
 import '../index.css';
+import DatabaseStatus from '../components/DatabaseStatus';
 
 const Dashboard = () => {
   const stats = [
@@ -111,6 +112,9 @@ const Dashboard = () => {
           </div>
         ))}
       </div>
+
+      {/* Database Status */}
+      <DatabaseStatus />
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
